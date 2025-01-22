@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PubSub Message Monitor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        .empty-message {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PubSub Message Monitor</h1>
+        <div id="messages">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Topic</th>
+                        <th>Message ID</th>
+                        <th>Data</th>
+                        <th>Attributes</th>
+                        <th>Publish Time</th>
+                    </tr>
+                </thead>
+                <tbody id="messageList">
+                    <!-- Messages will be inserted here -->
+                </tbody>
+            </table>
+            <div id="emptyMessage" class="empty-message">No messages in queue</div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+        
+        function connectWebSocket() {
+            console.log('Connecting to WebSocket...');
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            console.log('WebSocket URL:', wsUrl);
+            
+            ws = new WebSocket(wsUrl);
+            const messageList = document.getElementById('messageList');
+            const emptyMessage = document.getElementById('emptyMessage');
+
+            ws.onmessage = function(event) {
+                console.log('Received message from server');
+                try {
+                    const messages = JSON.parse(event.data);
+                    messageList.innerHTML = '';
+                    
+                    if (messages.length === 0) {
+                        emptyMessage.style.display = 'block';
+                    } else {
+                        emptyMessage.style.display = 'none';
+                        messages.forEach(msg => {
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                                <td>${msg.topic || ''}</td>
+                                <td>${msg.id || ''}</td>
+                                <td>${msg.data || ''}</td>
+                                <td>${JSON.stringify(msg.attributes || {})}</td>
+                                <td>${msg.publish_time ? new Date(msg.publish_time).toLocaleString() : ''}</td>
+                            `;
+                            messageList.appendChild(row);
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error processing message:', error);
+                }
+            };
+
+            ws.onopen = function() {
+                console.log('WebSocket connection established successfully');
+                reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+            };
+            
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+            
+            ws.onclose = function(event) {
+                console.log('WebSocket connection closed:', event.code, event.reason);
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    const timeout = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
+                    console.log(`Attempting to reconnect in ${timeout}ms...`);
+                    setTimeout(function() {
+                        reconnectAttempts++;
+                        connectWebSocket();
+                    }, timeout);
+                } else {
+                    console.error('Max reconnection attempts reached');
+                }
+            };
+        }
+
+        // Initial connection
+        connectWebSocket();
+    </script>
+</body>
+</html>
